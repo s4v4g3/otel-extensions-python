@@ -1,0 +1,3 @@
+opentelemetry-api
+opentelemetry-sdk
+pydantic

@@ -7,6 +7,12 @@ from pydantic import BaseSettings
 from opentelemetry import context, trace
 from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 
+__all__ = [
+    "TelemetryOptions",
+    "TraceEventLogHandler",
+    "init_telemetry_provider",
+    "instrumented",
+]
 TRACEPARENT_VAR = "TRACEPARENT"
 
 
@@ -31,7 +37,9 @@ class TraceEventLogHandler(logging.StreamHandler):
         pass
 
 
-def init_telemetry_provider(options: TelemetryOptions):
+def init_telemetry_provider(options: TelemetryOptions = None):
+    if options is None:
+        options = TelemetryOptions()
     try:
 
         from opentelemetry.sdk.resources import SERVICE_NAME, Resource

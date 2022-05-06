@@ -1,4 +1,4 @@
-from opentelemetry import trace, context
+from opentelemetry import trace
 from otel_extensions import instrumented, TelemetryOptions, init_telemetry_provider
 import time
 import random
@@ -34,11 +34,11 @@ def main() -> int:
     # manually create a span
     with trace.get_tracer(__name__).start_as_current_span("main") as span:
         foo()
-        return span.context.trace_id
+        return span.get_span_context().trace_id
 
 
 if __name__ == "__main__":
-    # one-time collection setup
+    # one-time collection setup -- assumes a collector agent running locally with an http receiver on port 4318
     options = TelemetryOptions(
         SERVICE_NAME="OpenTelemetry Example",
         OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:4318",

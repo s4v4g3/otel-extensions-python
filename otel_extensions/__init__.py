@@ -20,6 +20,7 @@ class TelemetryOptions(BaseSettings):
     OTEL_EXPORTER_OTLP_ENDPOINT: Optional[str] = None
     OTEL_EXPORTER_OTLP_PROTOCOL: str = "grpc"
     SERVICE_NAME: str = ""
+    OTEL_PROCESSOR_TYPE: str = "simple"
 
 
 class TraceEventLogHandler(logging.StreamHandler):
@@ -41,27 +42,34 @@ def init_telemetry_provider(options: TelemetryOptions = None):
     if options is None:
         options = TelemetryOptions()
     try:
-
         from opentelemetry.sdk.resources import SERVICE_NAME, Resource
         from opentelemetry.sdk.trace import TracerProvider
-        from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+        from opentelemetry.sdk.trace.export import (
+            SimpleSpanProcessor,
+            BatchSpanProcessor,
+        )
 
         otlp_endpoint = options.OTEL_EXPORTER_OTLP_ENDPOINT
         if otlp_endpoint:
             resource = Resource(attributes={SERVICE_NAME: options.SERVICE_NAME})
             provider = TracerProvider(resource=resource)
+            processor_type = (
+                BatchSpanProcessor
+                if options.OTEL_PROCESSOR_TYPE == "batch"
+                else SimpleSpanProcessor
+            )
             if options.OTEL_EXPORTER_OTLP_PROTOCOL == "grpc":
                 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
                     OTLPSpanExporter as GRPCSpanExporter,
                 )
 
-                processor = SimpleSpanProcessor(GRPCSpanExporter())
+                processor = processor_type(GRPCSpanExporter())
             elif options.OTEL_EXPORTER_OTLP_PROTOCOL == "http/protobuf":
                 from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
                     OTLPSpanExporter as HTTPSpanExporter,
                 )
 
-                processor = SimpleSpanProcessor(HTTPSpanExporter())
+                processor = processor_type(HTTPSpanExporter())
             else:
                 raise ValueError("Invalid value for OTEL_EXPORTER_OTLP_PROTOCOL")
             provider.add_span_processor(processor)

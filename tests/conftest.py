@@ -76,15 +76,15 @@ def pytest_sessionstart(session):
     init_telemetry_provider(
         TelemetryOptions(
             SERVICE_NAME="otel-extensions-tests",
-            OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:4318",
-            OTEL_EXPORTER_OTLP_PROTOCOL="http/protobuf",
+            OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:4317",
+            OTEL_PROCESSOR_TYPE="batch"
         )
     )
     session_name = "otel-extensions test"
     tracer = trace.get_tracer(session_name)
     session_span = _start_span(session_name, trace.SpanKind.SERVER)
     session_span_iterator = trace.use_span(session_span, end_on_exit=False)
-    session_span_iterator.__enter__()
+    session_span_iterator.__enter__()  # noqa
 
 
 def pytest_sessionfinish(session, exitstatus):  # noqa: U100
@@ -92,7 +92,7 @@ def pytest_sessionfinish(session, exitstatus):  # noqa: U100
     global session_span, session_span_iterator
     if session_span is not None:
         trace_id = session_span.get_span_context().trace_id
-        session_span_iterator.__exit__(None, None, None)
+        session_span_iterator.__exit__(None, None, None)  # noqa
         _end_span(session_span, exit_code_to_outcome(exitstatus))
         logger().info(f"Trace ID is {trace_id:32x}")
 

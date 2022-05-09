@@ -1,4 +1,4 @@
-from typing import Callable, Optional
+from typing import Callable, Optional, Dict
 import os
 from functools import wraps
 import logging
@@ -15,12 +15,16 @@ __all__ = [
 ]
 TRACEPARENT_VAR = "TRACEPARENT"
 
+global_tracer_provider: Optional[object] = None
+tracer_providers_by_service_name: Dict[str, object] = {}
+span_processors = []
+
 
 class TelemetryOptions(BaseSettings):
     OTEL_EXPORTER_OTLP_ENDPOINT: Optional[str] = None
-    OTEL_EXPORTER_OTLP_PROTOCOL: str = "grpc"
+    OTEL_EXPORTER_OTLP_PROTOCOL: str = "http/protobuf"
     OTEL_SERVICE_NAME: str = ""
-    OTEL_PROCESSOR_TYPE: str = "simple"
+    OTEL_PROCESSOR_TYPE: str = "batch"
 
 
 class TraceEventLogHandler(logging.StreamHandler):
@@ -38,7 +42,19 @@ class TraceEventLogHandler(logging.StreamHandler):
         pass
 
 
+def get_tracer(module_name: str, service_name: str = None):
+    global global_tracer_provider, tracer_providers_by_service_name
+    tracer_provider = (
+        global_tracer_provider
+        if service_name is None
+        else tracer_providers_by_service_name.get(service_name)
+    )
+    assert tracer_provider is not None, "init_telemetry_provider must be called first!"
+    return trace.get_tracer(module_name, tracer_provider=tracer_provider)
+
+
 def init_telemetry_provider(options: TelemetryOptions = None):
+    global global_tracer_provider, tracer_providers_by_service_name
     if options is None:
         options = TelemetryOptions()
     try:
@@ -51,8 +67,14 @@ def init_telemetry_provider(options: TelemetryOptions = None):
 
         otlp_endpoint = options.OTEL_EXPORTER_OTLP_ENDPOINT
         if otlp_endpoint:
-            resource = Resource(attributes={SERVICE_NAME: options.OTEL_SERVICE_NAME})
-            provider = TracerProvider(resource=resource)
+            service_name = options.OTEL_SERVICE_NAME
+            if service_name == "":
+                logging.getLogger(__name__).warning(
+                    "OTEL_SERVICE_NAME not set; defaulting to 'otel_extensions'"
+                )
+                service_name = "otel_extensions"
+            resource = Resource(attributes={SERVICE_NAME: service_name})
+            tracer_provider = TracerProvider(resource=resource)
             processor_type = (
                 BatchSpanProcessor
                 if options.OTEL_PROCESSOR_TYPE == "batch"
@@ -72,14 +94,26 @@ def init_telemetry_provider(options: TelemetryOptions = None):
                 processor = processor_type(HTTPSpanExporter())
             else:
                 raise ValueError("Invalid value for OTEL_EXPORTER_OTLP_PROTOCOL")
-            provider.add_span_processor(processor)
-            trace.set_tracer_provider(provider)
+            tracer_provider.add_span_processor(processor)
+            if global_tracer_provider is None:
+                global_tracer_provider = tracer_provider
+                trace.set_tracer_provider(global_tracer_provider)
+            tracer_providers_by_service_name[service_name] = tracer_provider
     except ImportError:
         pass
 
     traceparent = os.environ.get(TRACEPARENT_VAR)
     carrier = {"traceparent": traceparent} if traceparent else {}
     context.attach(TraceContextTextMapPropagator().extract(carrier=carrier))
+
+
+def flush_telemetry_data():
+    global global_tracer_provider, tracer_providers_by_service_name
+    if global_tracer_provider is not None:
+        global_tracer_provider.force_flush()  # noqa
+    for service in tracer_providers_by_service_name:
+        provider = tracer_providers_by_service_name[service]
+        provider.force_flush()  # noqa
 
 
 class ContextInjector:
@@ -106,8 +140,9 @@ def inject_context_to_env(wrapped_function: Callable):
 
 
 class Instrumented:
-    def __init__(self, span_name=None):
+    def __init__(self, span_name: str = None, service_name: str = None):
         self.span_name = span_name
+        self.service_name = service_name
 
     def __call__(self, wrapped_function: Callable) -> Callable:
         @wraps(wrapped_function)
@@ -117,7 +152,9 @@ class Instrumented:
             if module is not None:
                 module_name = module.__name__
             span_name = self.span_name or wrapped_function.__qualname__
-            with trace.get_tracer(module_name).start_as_current_span(span_name):
+            with get_tracer(
+                module_name, service_name=self.service_name
+            ).start_as_current_span(span_name):
                 return wrapped_function(*args, **kwargs)
 
         return new_f
@@ -127,6 +164,7 @@ def instrumented(
     wrapped_function: Optional[Callable] = None,
     *,
     span_name: Optional[str] = None,
+    service_name: Optional[str] = None,
 ):
     """
     Decorator to enable opentelemetry instrumentation on a function.
@@ -136,9 +174,10 @@ def instrumented(
     Alternatively, the span name can be set manually by setting the span_name parameter
 
     @param wrapped_function:  function or method to wrap
-    @param span_name:  optional span name
+    @param span_name:  optional span name.  Defaults to fully qualified function name of wrapped function
+    @param service_name: optional service name.  Defaults to service name set in first invocation of `init_telemetry_provider`
     """
-    inst = Instrumented(span_name=span_name)
+    inst = Instrumented(span_name=span_name, service_name=service_name)
     if wrapped_function:
         return inst(wrapped_function)
     return inst

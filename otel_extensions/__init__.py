@@ -19,7 +19,7 @@ TRACEPARENT_VAR = "TRACEPARENT"
 class TelemetryOptions(BaseSettings):
     OTEL_EXPORTER_OTLP_ENDPOINT: Optional[str] = None
     OTEL_EXPORTER_OTLP_PROTOCOL: str = "grpc"
-    SERVICE_NAME: str = ""
+    OTEL_SERVICE_NAME: str = ""
     OTEL_PROCESSOR_TYPE: str = "simple"
 
 
@@ -51,7 +51,7 @@ def init_telemetry_provider(options: TelemetryOptions = None):
 
         otlp_endpoint = options.OTEL_EXPORTER_OTLP_ENDPOINT
         if otlp_endpoint:
-            resource = Resource(attributes={SERVICE_NAME: options.SERVICE_NAME})
+            resource = Resource(attributes={SERVICE_NAME: options.OTEL_SERVICE_NAME})
             provider = TracerProvider(resource=resource)
             processor_type = (
                 BatchSpanProcessor

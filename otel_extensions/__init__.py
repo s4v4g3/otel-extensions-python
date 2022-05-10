@@ -126,7 +126,7 @@ def _try_load_trace_provider(options: TelemetryOptions):
                 )
             module = importlib.import_module(module_name)
             klass = getattr(module, class_name)
-            processor = processor_type(klass(endpoint=options.OTEL_EXPORTER_OTLP_ENDPOINT))
+            processor = processor_type(klass(options=options))
         else:
             raise ValueError("Invalid value for OTEL_EXPORTER_OTLP_PROTOCOL")
         tracer_provider.add_span_processor(processor)

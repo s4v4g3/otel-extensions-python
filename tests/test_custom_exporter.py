@@ -13,8 +13,8 @@ from otel_extensions import (
 class FakeCustomExporter(SpanExporter):
     all_spans = []
 
-    def __init__(self, endpoint: str = None):
-        assert endpoint == "unused"
+    def __init__(self, options: TelemetryOptions):
+        assert options.OTEL_EXPORTER_OTLP_ENDPOINT == "unused"
         self.spans = []
 
     def export(self, spans: typing.Sequence[ReadableSpan]) -> "SpanExportResult":

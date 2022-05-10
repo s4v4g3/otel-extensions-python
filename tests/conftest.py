@@ -75,9 +75,10 @@ def pytest_sessionstart(session):
     global session_span, tracer, session_span_iterator
     init_telemetry_provider(
         TelemetryOptions(
-            SERVICE_NAME="otel-extensions-tests",
-            OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:4317",
-            OTEL_PROCESSOR_TYPE="batch"
+            OTEL_SERVICE_NAME="otel-extensions-tests",
+            OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:4318",
+            OTEL_EXPORTER_OTLP_PROTOCOL="http/protobuf",
+            OTEL_PROCESSOR_TYPE="simple",
         )
     )
     session_name = "otel-extensions test"

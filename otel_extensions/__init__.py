@@ -6,6 +6,7 @@ import inspect
 from pydantic import BaseSettings
 from opentelemetry import context, trace
 from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
+import importlib
 
 __all__ = [
     "TelemetryOptions",
@@ -23,6 +24,7 @@ span_processors = []
 class TelemetryOptions(BaseSettings):
     OTEL_EXPORTER_OTLP_ENDPOINT: Optional[str] = None
     OTEL_EXPORTER_OTLP_PROTOCOL: str = "http/protobuf"
+    OTEL_EXPORTER_CUSTOM_SPAN_EXPORTER_TYPE: str = ""
     OTEL_SERVICE_NAME: str = ""
     OTEL_PROCESSOR_TYPE: str = "batch"
 
@@ -49,58 +51,15 @@ def get_tracer(module_name: str, service_name: str = None):
         if service_name is None
         else tracer_providers_by_service_name.get(service_name)
     )
-    assert tracer_provider is not None, "init_telemetry_provider must be called first!"
     return trace.get_tracer(module_name, tracer_provider=tracer_provider)
 
 
 def init_telemetry_provider(options: TelemetryOptions = None):
-    global global_tracer_provider, tracer_providers_by_service_name
     if options is None:
         options = TelemetryOptions()
-    try:
-        from opentelemetry.sdk.resources import SERVICE_NAME, Resource
-        from opentelemetry.sdk.trace import TracerProvider
-        from opentelemetry.sdk.trace.export import (
-            SimpleSpanProcessor,
-            BatchSpanProcessor,
-        )
-
-        otlp_endpoint = options.OTEL_EXPORTER_OTLP_ENDPOINT
-        if otlp_endpoint:
-            service_name = options.OTEL_SERVICE_NAME
-            if service_name == "":
-                logging.getLogger(__name__).warning(
-                    "OTEL_SERVICE_NAME not set; defaulting to 'otel_extensions'"
-                )
-                service_name = "otel_extensions"
-            resource = Resource(attributes={SERVICE_NAME: service_name})
-            tracer_provider = TracerProvider(resource=resource)
-            processor_type = (
-                BatchSpanProcessor
-                if options.OTEL_PROCESSOR_TYPE == "batch"
-                else SimpleSpanProcessor
-            )
-            if options.OTEL_EXPORTER_OTLP_PROTOCOL == "grpc":
-                from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
-                    OTLPSpanExporter as GRPCSpanExporter,
-                )
-
-                processor = processor_type(GRPCSpanExporter())
-            elif options.OTEL_EXPORTER_OTLP_PROTOCOL == "http/protobuf":
-                from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
-                    OTLPSpanExporter as HTTPSpanExporter,
-                )
-
-                processor = processor_type(HTTPSpanExporter())
-            else:
-                raise ValueError("Invalid value for OTEL_EXPORTER_OTLP_PROTOCOL")
-            tracer_provider.add_span_processor(processor)
-            if global_tracer_provider is None:
-                global_tracer_provider = tracer_provider
-                trace.set_tracer_provider(global_tracer_provider)
-            tracer_providers_by_service_name[service_name] = tracer_provider
-    except ImportError:
-        pass
+    otlp_endpoint = options.OTEL_EXPORTER_OTLP_ENDPOINT
+    if otlp_endpoint:
+        _try_load_trace_provider(options)
 
     traceparent = os.environ.get(TRACEPARENT_VAR)
     carrier = {"traceparent": traceparent} if traceparent else {}
@@ -114,6 +73,78 @@ def flush_telemetry_data():
     for service in tracer_providers_by_service_name:
         provider = tracer_providers_by_service_name[service]
         provider.force_flush()  # noqa
+
+
+def _try_load_trace_provider(options: TelemetryOptions):
+    global global_tracer_provider, tracer_providers_by_service_name
+    try:
+        from opentelemetry.sdk.resources import SERVICE_NAME, Resource
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import (
+            SimpleSpanProcessor,
+            BatchSpanProcessor,
+        )
+
+        service_name = options.OTEL_SERVICE_NAME
+        if service_name == "":
+            logging.getLogger(__name__).warning(
+                "OTEL_SERVICE_NAME not set; defaulting to 'otel_extensions'"
+            )
+            service_name = "otel_extensions"
+        resource = Resource(attributes={SERVICE_NAME: service_name})
+        tracer_provider = TracerProvider(resource=resource)
+        processor_type = (
+            BatchSpanProcessor
+            if options.OTEL_PROCESSOR_TYPE == "batch"
+            else SimpleSpanProcessor
+        )
+        if options.OTEL_EXPORTER_OTLP_PROTOCOL == "grpc":
+            from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
+                OTLPSpanExporter as GRPCSpanExporter,
+            )
+
+            processor = processor_type(
+                GRPCSpanExporter(endpoint=_get_traces_endpoint(options))
+            )
+        elif options.OTEL_EXPORTER_OTLP_PROTOCOL == "http/protobuf":
+            from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
+                OTLPSpanExporter as HTTPSpanExporter,
+            )
+
+            processor = processor_type(
+                HTTPSpanExporter(endpoint=_get_traces_endpoint(options))
+            )
+        elif options.OTEL_EXPORTER_OTLP_PROTOCOL == "custom":
+            (
+                module_name,
+                sep,
+                class_name,
+            ) = options.OTEL_EXPORTER_CUSTOM_SPAN_EXPORTER_TYPE.rpartition(".")
+            if sep == "":
+                raise RuntimeError(
+                    "Invalid value for OTEL_EXPORTER_CUSTOM_SPAN_EXPORTER_TYPE"
+                )
+            module = importlib.import_module(module_name)
+            klass = getattr(module, class_name)
+            processor = processor_type(klass(endpoint=options.OTEL_EXPORTER_OTLP_ENDPOINT))
+        else:
+            raise ValueError("Invalid value for OTEL_EXPORTER_OTLP_PROTOCOL")
+        tracer_provider.add_span_processor(processor)
+        if global_tracer_provider is None:
+            global_tracer_provider = tracer_provider
+            trace.set_tracer_provider(global_tracer_provider)
+        tracer_providers_by_service_name[service_name] = tracer_provider
+    except ImportError:
+        pass
+
+
+def _get_traces_endpoint(options: TelemetryOptions):
+    endpoint = (
+        f"{options.OTEL_EXPORTER_OTLP_ENDPOINT}/v1/traces"
+        if options.OTEL_EXPORTER_OTLP_ENDPOINT.endswith("/")
+        else options.OTEL_EXPORTER_OTLP_ENDPOINT
+    )
+    return endpoint
 
 
 class ContextInjector:

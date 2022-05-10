@@ -7,6 +7,7 @@ from pydantic import BaseSettings
 from opentelemetry import context, trace
 from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 import importlib
+import warnings
 
 __all__ = [
     "TelemetryOptions",
@@ -51,7 +52,9 @@ def get_tracer(module_name: str, service_name: str = None):
         if service_name is None
         else tracer_providers_by_service_name.get(service_name)
     )
-    return trace.get_tracer(module_name, tracer_provider=tracer_provider)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        return trace.get_tracer(module_name, tracer_provider=tracer_provider)
 
 
 def init_telemetry_provider(options: TelemetryOptions = None):

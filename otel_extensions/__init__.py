@@ -140,7 +140,7 @@ def _try_load_trace_provider(options: TelemetryOptions):
 
 def _get_traces_endpoint(options: TelemetryOptions):
     endpoint = (
-        f"{options.OTEL_EXPORTER_OTLP_ENDPOINT}/v1/traces"
+        f"{options.OTEL_EXPORTER_OTLP_ENDPOINT}v1/traces"
         if options.OTEL_EXPORTER_OTLP_ENDPOINT.endswith("/")
         else options.OTEL_EXPORTER_OTLP_ENDPOINT
     )

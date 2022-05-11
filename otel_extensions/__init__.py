@@ -8,6 +8,7 @@ from opentelemetry import context, trace
 from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 import importlib
 import warnings
+from contextlib import contextmanager
 
 __all__ = [
     "TelemetryOptions",
@@ -15,7 +16,6 @@ __all__ = [
     "init_telemetry_provider",
     "instrumented",
 ]
-TRACEPARENT_VAR = "TRACEPARENT"
 
 global_tracer_provider: Optional[object] = None
 tracer_providers_by_service_name: Dict[str, object] = {}
@@ -23,14 +23,71 @@ span_processors = []
 
 
 class TelemetryOptions(BaseSettings):
+    """Settings class holding options for telemetry"""
+
     OTEL_EXPORTER_OTLP_ENDPOINT: Optional[str] = None
+    OTEL_EXPORTER_OTLP_CERTIFICATE: Optional[str] = None
     OTEL_EXPORTER_OTLP_PROTOCOL: str = "http/protobuf"
     OTEL_EXPORTER_CUSTOM_SPAN_EXPORTER_TYPE: str = ""
     OTEL_SERVICE_NAME: str = ""
     OTEL_PROCESSOR_TYPE: str = "batch"
+    TRACEPARENT: Optional[str] = None
+
+
+class TraceContextCarrier:
+    """Helper class to simplify context propagation tasks"""
+
+    traceparent_var = "TRACEPARENT"
+
+    def __init__(self, carrier: Optional[dict] = None):
+        self.token = None
+        self.carrier = carrier
+        if carrier is None:
+            self.carrier = {}
+            TraceContextTextMapPropagator().inject(self.carrier)
+
+    def __enter__(self):
+        if self.token is None:
+            self.token = self.__attach(self.carrier)
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.detach()
+
+    @classmethod
+    def attach_from_env(cls):
+        traceparent = os.environ.get(cls.traceparent_var)
+        carrier = TraceContextCarrier(
+            carrier={"traceparent": traceparent} if traceparent is not None else {}
+        )
+        carrier.attach()
+        return carrier
+
+    @classmethod
+    def inject_to_env(cls):
+        ctx = TraceContextCarrier()
+        if "traceparent" in ctx.carrier:
+            os.environ[cls.traceparent_var] = ctx.carrier["traceparent"]
+
+    def attach(self):
+        self.token = self.__attach(self.carrier)
+
+    def detach(self):
+        if self.token is not None:
+            context.detach(self.token)
+            self.token = None
+
+    def __eq__(self, other):
+        return self.carrier == other.carrier
+
+    @classmethod
+    def __attach(cls, carrier):
+        token = context.attach(TraceContextTextMapPropagator().extract(carrier=carrier))
+        return token
 
 
 class TraceEventLogHandler(logging.StreamHandler):
+    """log handler class that adds log messages as events in the current span"""
+
     def __init__(self):
         super().__init__(stream=self)
         self.name = "TraceEventLogHandler"
@@ -41,11 +98,19 @@ class TraceEventLogHandler(logging.StreamHandler):
             current_span.add_event(msg)
 
     def flush(self):
-        # no-op
-        pass
+        """no need to flush"""
 
 
 def get_tracer(module_name: str, service_name: str = None):
+    """
+    Get the `Tracer` for the specified module and service name
+    Args:
+        module_name: module name
+        service_name: optional service name
+
+    Returns: a Tracer object
+
+    """
     global global_tracer_provider, tracer_providers_by_service_name
     tracer_provider = (
         global_tracer_provider
@@ -58,18 +123,25 @@ def get_tracer(module_name: str, service_name: str = None):
 
 
 def init_telemetry_provider(options: TelemetryOptions = None):
+    """
+    Initialize telemetry collection for a service, and inherits any trace context
+    set from the TRACEPARENT environment variable
+
+    Args:
+        options:  `TelemetryOptions` settings object
+
+    """
     if options is None:
         options = TelemetryOptions()
     otlp_endpoint = options.OTEL_EXPORTER_OTLP_ENDPOINT
     if otlp_endpoint:
         _try_load_trace_provider(options)
 
-    traceparent = os.environ.get(TRACEPARENT_VAR)
-    carrier = {"traceparent": traceparent} if traceparent else {}
-    context.attach(TraceContextTextMapPropagator().extract(carrier=carrier))
+    TraceContextCarrier.attach_from_env()
 
 
 def flush_telemetry_data():
+    """Forces a flush of all span exporters attached to trace providers"""
     global global_tracer_provider, tracer_providers_by_service_name
     if global_tracer_provider is not None:
         global_tracer_provider.force_flush()  # noqa
@@ -154,16 +226,13 @@ class ContextInjector:
     def __call__(self, wrapped_function: Callable) -> Callable:
         @wraps(wrapped_function)
         def new_f(*args, **kwargs):
-            prev_env = os.environ.get(TRACEPARENT_VAR)
-            carrier = {}
-            TraceContextTextMapPropagator().inject(carrier)
-            if "traceparent" in carrier:
-                os.environ[TRACEPARENT_VAR] = carrier["traceparent"]
+            prev_env = os.environ.get(TraceContextCarrier.traceparent_var)
+            TraceContextCarrier.inject_to_env()
             try:
                 return wrapped_function(*args, **kwargs)
             finally:
                 if prev_env:
-                    os.environ[TRACEPARENT_VAR] = prev_env
+                    os.environ[TraceContextCarrier.traceparent_var] = prev_env
 
         return new_f
 
@@ -209,7 +278,8 @@ def instrumented(
 
     @param wrapped_function:  function or method to wrap
     @param span_name:  optional span name.  Defaults to fully qualified function name of wrapped function
-    @param service_name: optional service name.  Defaults to service name set in first invocation of `init_telemetry_provider`
+    @param service_name: optional service name.  Defaults to service name set in first invocation
+                         of `init_telemetry_provider`
     """
     inst = Instrumented(span_name=span_name, service_name=service_name)
     if wrapped_function:

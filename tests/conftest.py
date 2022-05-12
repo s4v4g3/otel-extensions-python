@@ -1,6 +1,6 @@
 from otel_extensions_pytest import TelemetryOptions
 
-pytest_plugins = ("otel_extensions",)
+pytest_plugins = ("otel_extensions_pytest",)
 
 
 def pytest_addoption(parser, pluginmanager):

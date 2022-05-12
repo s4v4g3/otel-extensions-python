@@ -8,7 +8,6 @@ from opentelemetry import context, trace
 from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 import importlib
 import warnings
-from contextlib import contextmanager
 
 __all__ = [
     "TelemetryOptions",
@@ -137,7 +136,9 @@ def init_telemetry_provider(options: TelemetryOptions = None):
     if otlp_endpoint:
         _try_load_trace_provider(options)
 
-    TraceContextCarrier.attach_from_env()
+    # Attach to context from TRACEPARENT environment, but only if we don't already have a context with a span parent
+    if len(context.get_current()) == 0:
+        TraceContextCarrier.attach_from_env()
 
 
 def flush_telemetry_data():

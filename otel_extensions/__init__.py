@@ -174,6 +174,13 @@ def _try_load_trace_provider(options: TelemetryOptions):
             if options.OTEL_PROCESSOR_TYPE == "batch"
             else SimpleSpanProcessor
         )
+        if (
+            options.OTEL_EXPORTER_OTLP_CERTIFICATE is not None
+            and "OTEL_EXPORTER_OTLP_CERTIFICATE" not in os.environ
+        ):
+            os.environ[
+                "OTEL_EXPORTER_OTLP_CERTIFICATE"
+            ] = options.OTEL_EXPORTER_OTLP_CERTIFICATE
         if options.OTEL_EXPORTER_OTLP_PROTOCOL == "grpc":
             from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
                 OTLPSpanExporter as GRPCSpanExporter,
@@ -245,24 +252,34 @@ def inject_context_to_env(wrapped_function: Callable):
 
 
 class Instrumented:
-    def __init__(self, span_name: str = None, service_name: str = None):
+    def __init__(
+        self, span_name: str = None, service_name: str = None, is_async: bool = False
+    ):
         self.span_name = span_name
         self.service_name = service_name
 
     def __call__(self, wrapped_function: Callable) -> Callable:
+        module = inspect.getmodule(wrapped_function)
+        module_name = __name__
+        if module is not None:
+            module_name = module.__name__
+        span_name = self.span_name or wrapped_function.__qualname__
+
         @wraps(wrapped_function)
         def new_f(*args, **kwargs):
-            module = inspect.getmodule(wrapped_function)
-            module_name = __name__
-            if module is not None:
-                module_name = module.__name__
-            span_name = self.span_name or wrapped_function.__qualname__
             with get_tracer(
                 module_name, service_name=self.service_name
             ).start_as_current_span(span_name):
                 return wrapped_function(*args, **kwargs)
 
-        return new_f
+        @wraps(wrapped_function)
+        async def new_f_async(*args, **kwargs):
+            with get_tracer(
+                module_name, service_name=self.service_name
+            ).start_as_current_span(span_name):
+                return await wrapped_function(*args, **kwargs)
+
+        return new_f if inspect.iscoroutinefunction(wrapped_function) else new_f_async
 
 
 def instrumented(

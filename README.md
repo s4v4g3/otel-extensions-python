@@ -62,11 +62,17 @@ init_telemetry_provider(options)
 ```
 
 ### Instrumentation Decorator
-You can use the `@instrumented` decorator to automatically wrap a span around a function or method
+You can use the `@instrumented` decorator to automatically wrap a span around a function or method.
+(As of version 0.2.0, the decorator can support coroutine functions defined as `async def` as well as normal functions)
 
 ```python
 from otel_extensions import init_telemetry_provider, instrumented
+import asyncio
 
+async def main():
+    foo()
+    await async_foo()
+    
 @instrumented
 def foo():
     """Creates a span named 'foo'"""
@@ -77,10 +83,20 @@ def bar():
     """Creates a span named 'custom span name'"""
     print("Hello World")
 
+@instrumented
+async def async_foo():
+    """Creates a span named 'async_foo'"""
+    await async_bar()
+
+@instrumented(span_name="custom span name")
+async def async_bar():
+    """Creates a span named 'custom span name'"""
+    print("Hello World")
+    
 if __name__ == '__main__':
     # init telemetry provider (using options from environment variables)
     init_telemetry_provider()
-    foo()
+    asyncio.run(main())
 
 ```
 

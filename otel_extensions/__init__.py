@@ -8,6 +8,7 @@ from opentelemetry import context, trace
 from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 import importlib
 import warnings
+import sys
 
 __all__ = [
     "TelemetryOptions",
@@ -252,9 +253,7 @@ def inject_context_to_env(wrapped_function: Callable):
 
 
 class Instrumented:
-    def __init__(
-        self, span_name: str = None, service_name: str = None, is_async: bool = False
-    ):
+    def __init__(self, span_name: str = None, service_name: str = None):
         self.span_name = span_name
         self.service_name = service_name
 
@@ -272,14 +271,20 @@ class Instrumented:
             ).start_as_current_span(span_name):
                 return wrapped_function(*args, **kwargs)
 
-        @wraps(wrapped_function)
-        async def new_f_async(*args, **kwargs):
-            with get_tracer(
-                module_name, service_name=self.service_name
-            ).start_as_current_span(span_name):
-                return await wrapped_function(*args, **kwargs)
+        if sys.version_info < (3, 7):
+            return new_f
+        else:
 
-        return new_f if inspect.iscoroutinefunction(wrapped_function) else new_f_async
+            @wraps(wrapped_function)
+            async def new_f_async(*args, **kwargs):
+                with get_tracer(
+                    module_name, service_name=self.service_name
+                ).start_as_current_span(span_name):
+                    return await wrapped_function(*args, **kwargs)
+
+            return (
+                new_f if inspect.iscoroutinefunction(wrapped_function) else new_f_async
+            )
 
 
 def instrumented(

@@ -42,7 +42,7 @@ class TraceContextCarrier:
     def __init__(self, carrier: Optional[dict] = None):
         self.token = None
         self.carrier = carrier
-        if carrier is None:
+        if not carrier:
             self.carrier = {}
             TraceContextTextMapPropagator().inject(self.carrier)
 

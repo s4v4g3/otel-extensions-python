@@ -8,7 +8,7 @@ from opentelemetry import context, trace
 from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 import importlib
 import warnings
-import sys
+from opentelemetry.util.types import AttributeValue as SpanAttributeValue
 
 __all__ = [
     "TelemetryOptions",
@@ -253,12 +253,19 @@ def inject_context_to_env(wrapped_function: Callable):
 
 
 class Instrumented:
-    def __init__(self, span_name: str = None, service_name: str = None):
+    def __init__(
+        self,
+        span_name: str = None,
+        service_name: str = None,
+        span_attributes: Optional[Dict[str, SpanAttributeValue]] = None,
+    ):
         self.span_name = span_name
         self.service_name = service_name
+        self.span_attributes = span_attributes if span_attributes is not None else {}
 
     def __call__(self, wrapped_function: Callable) -> Callable:
         module = inspect.getmodule(wrapped_function)
+        is_async = inspect.iscoroutinefunction(wrapped_function)
         module_name = __name__
         if module is not None:
             module_name = module.__name__
@@ -268,23 +275,19 @@ class Instrumented:
         def new_f(*args, **kwargs):
             with get_tracer(
                 module_name, service_name=self.service_name
-            ).start_as_current_span(span_name):
+            ).start_as_current_span(span_name) as span:
+                span.set_attributes(self.span_attributes)
                 return wrapped_function(*args, **kwargs)
 
-        if sys.version_info < (3, 7):
-            return new_f
-        else:
+        @wraps(wrapped_function)
+        async def new_f_async(*args, **kwargs):
+            with get_tracer(
+                module_name, service_name=self.service_name
+            ).start_as_current_span(span_name) as span:
+                span.set_attributes(self.span_attributes)
+                return await wrapped_function(*args, **kwargs)
 
-            @wraps(wrapped_function)
-            async def new_f_async(*args, **kwargs):
-                with get_tracer(
-                    module_name, service_name=self.service_name
-                ).start_as_current_span(span_name):
-                    return await wrapped_function(*args, **kwargs)
-
-            return (
-                new_f if inspect.iscoroutinefunction(wrapped_function) else new_f_async
-            )
+        return new_f_async if is_async else new_f
 
 
 def instrumented(
@@ -292,6 +295,7 @@ def instrumented(
     *,
     span_name: Optional[str] = None,
     service_name: Optional[str] = None,
+    span_attributes: Optional[Dict[str, SpanAttributeValue]] = None,
 ):
     """
     Decorator to enable opentelemetry instrumentation on a function.
@@ -304,8 +308,11 @@ def instrumented(
     @param span_name:  optional span name.  Defaults to fully qualified function name of wrapped function
     @param service_name: optional service name.  Defaults to service name set in first invocation
                          of `init_telemetry_provider`
+    @param span_attributes: optional dictionary of attributes to be set on the span
     """
-    inst = Instrumented(span_name=span_name, service_name=service_name)
+    inst = Instrumented(
+        span_name=span_name, service_name=service_name, span_attributes=span_attributes
+    )
     if wrapped_function:
         return inst(wrapped_function)
     return inst

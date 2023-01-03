@@ -82,6 +82,12 @@ def foo():
 def bar():
     """Creates a span named 'custom span name'"""
     print("Hello World")
+    
+@instrumented(span_attributes={"attr1": "val1", "attr2": "val2"})
+def fn_with_attrs():
+    """Creates a span named 'fn_with_attrs' and sets key/value pairs
+    from `span_attributes` as span attributes"""
+    print("Hello World")
 
 @instrumented
 async def async_foo():
@@ -91,6 +97,17 @@ async def async_foo():
 @instrumented(span_name="custom span name")
 async def async_bar():
     """Creates a span named 'custom span name'"""
+    print("Hello World")
+    
+@instrumented(span_name="custom span name")
+async def async_bar():
+    """Creates a span named 'custom span name'"""
+    print("Hello World")
+    
+@instrumented(span_attributes={"attr1": "val1", "attr2": "val2"})
+async def async_fn_with_attrs():
+    """Creates a span named 'async_fn_with_attrs' and sets key/value pairs
+    from `span_attributes` as span attributes"""
     print("Hello World")
     
 if __name__ == '__main__':

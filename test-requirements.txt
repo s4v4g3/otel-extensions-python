@@ -1,5 +1,4 @@
 pytest
 pytest-cov
-opentelemetry-exporter-otlp
-otel-extensions-pytest>=0.1.4
+opentelemetry-distro[otlp]
 pytest-asyncio

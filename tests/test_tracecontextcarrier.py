@@ -1,8 +1,9 @@
 import os
 
-from otel_extensions import TraceContextCarrier
+from otel_extensions import TraceContextCarrier, instrumented, inject_context_to_env
 from opentelemetry import context
 from contextlib import contextmanager
+
 
 @contextmanager
 def temporary_environment_variable_setter(var, val):
@@ -22,29 +23,48 @@ def temporary_environment_variable_setter(var, val):
             os.environ[var] = prev_val
 
 
-
 def test_tracecontextcarrier():
-    assert len(context.get_current()) > 0
-    orig_ctx = TraceContextCarrier()
-    with temporary_environment_variable_setter("TRACEPARENT", None):
-        empty_ctx = TraceContextCarrier.attach_from_env()
-        assert len(context.get_current()) == 0
-        with empty_ctx:
-            assert len(context.get_current()) == 0
-
-            with orig_ctx:
-                assert len(context.get_current()) > 0
-            assert len(context.get_current()) == 0
-
-            orig_ctx.attach()
-            assert len(context.get_current()) > 0
-            new_ctx = TraceContextCarrier()
-            assert orig_ctx == new_ctx
-            orig_ctx.detach()
-            assert len(context.get_current()) == 0
-
+    @instrumented
+    def test_fn():
         assert len(context.get_current()) > 0
+        orig_ctx = TraceContextCarrier()
+        with temporary_environment_variable_setter("TRACEPARENT", None):
+            empty_ctx = TraceContextCarrier.attach_from_env()
+            assert len(context.get_current()) == 0
+            with empty_ctx:
+                assert len(context.get_current()) == 0
 
+                with orig_ctx:
+                    assert len(context.get_current()) > 0
+                assert len(context.get_current()) == 0
 
+                orig_ctx.attach()
+                assert len(context.get_current()) > 0
+                new_ctx = TraceContextCarrier()
+                assert orig_ctx == new_ctx
+                orig_ctx.detach()
+                assert len(context.get_current()) == 0
+                TraceContextCarrier.inject_to_env()
+                assert "TRACEPARENT" not in os.environ
+                orig_ctx.detach()
+
+            assert len(context.get_current()) > 0
+
+        with temporary_environment_variable_setter("TRACEPARENT", "invalid"):
+            TraceContextCarrier.inject_to_env()
+            assert os.environ["TRACEPARENT"].startswith("00-")
+
+    test_fn()
+
+def test_context_injection():
+
+    @instrumented
+    def test_fn():
+        @inject_context_to_env
+        def wrapped():
+            assert os.environ["TRACEPARENT"].startswith("00-")
+
+    with temporary_environment_variable_setter("TRACEPARENT", None):
+        test_fn()
 
 

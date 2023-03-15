@@ -26,7 +26,8 @@ class FakeCustomExporter(SpanExporter):
 @pytest.mark.parametrize("span_name", ["foo", "bar"])
 @pytest.mark.parametrize("service_name", ["foo_service", "bar_service"])
 @pytest.mark.parametrize("processor_type", ["simple", "batch"])
-def test_custom_exporter(processor_type, service_name, span_name):
+@pytest.mark.parametrize("resource_attrs", [None, {}, {"foo": "bar"}])
+def test_custom_exporter(processor_type, service_name, span_name, resource_attrs):
     type_name = f"{__name__}.{FakeCustomExporter.__name__}"
     options = TelemetryOptions(
         OTEL_EXPORTER_OTLP_ENDPOINT="unused",
@@ -35,8 +36,21 @@ def test_custom_exporter(processor_type, service_name, span_name):
         OTEL_SERVICE_NAME=service_name,
         OTEL_PROCESSOR_TYPE=processor_type,
     )
-    init_telemetry_provider(options)
+    if resource_attrs is not None:
+        init_telemetry_provider(options, **resource_attrs)
+    else:
+        init_telemetry_provider(options)
     tracer = get_tracer(__name__, service_name)
+    assert (
+        "service.name" in tracer.resource.attributes
+        and tracer.resource.attributes["service.name"] == service_name
+    )
+    if resource_attrs:
+        for attr in resource_attrs:
+            assert (
+                attr in tracer.resource.attributes
+                and tracer.resource.attributes[attr] == resource_attrs[attr]
+            )
     with tracer.start_as_current_span(span_name) as span:
         assert span.name == span_name
         span_id = span.context.span_id

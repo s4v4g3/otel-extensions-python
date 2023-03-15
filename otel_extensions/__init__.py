@@ -15,6 +15,11 @@ __all__ = [
     "TraceEventLogHandler",
     "init_telemetry_provider",
     "instrumented",
+    "TraceContextCarrier",
+    "get_tracer",
+    "flush_telemetry_data",
+    "ContextInjector",
+    "inject_context_to_env",
 ]
 
 global_tracer_provider: Optional[object] = None
@@ -122,7 +127,7 @@ def get_tracer(module_name: str, service_name: str = None):
         return trace.get_tracer(module_name, tracer_provider=tracer_provider)
 
 
-def init_telemetry_provider(options: TelemetryOptions = None):
+def init_telemetry_provider(options: TelemetryOptions = None, **resource_attrs):
     """
     Initialize telemetry collection for a service, and inherits any trace context
     set from the TRACEPARENT environment variable
@@ -135,7 +140,7 @@ def init_telemetry_provider(options: TelemetryOptions = None):
         options = TelemetryOptions()
     otlp_endpoint = options.OTEL_EXPORTER_OTLP_ENDPOINT
     if otlp_endpoint:
-        _try_load_trace_provider(options)
+        _try_load_trace_provider(options, **resource_attrs)
 
     # Attach to context from TRACEPARENT environment, but only if we don't already have a context with a span parent
     if len(context.get_current()) == 0:
@@ -152,7 +157,7 @@ def flush_telemetry_data():
         provider.force_flush()  # noqa
 
 
-def _try_load_trace_provider(options: TelemetryOptions):
+def _try_load_trace_provider(options: TelemetryOptions, **resource_attrs):
     global global_tracer_provider, tracer_providers_by_service_name
     try:
         from opentelemetry.sdk.resources import SERVICE_NAME, Resource
@@ -168,7 +173,7 @@ def _try_load_trace_provider(options: TelemetryOptions):
                 "OTEL_SERVICE_NAME not set; defaulting to 'otel_extensions'"
             )
             service_name = "otel_extensions"
-        resource = Resource(attributes={SERVICE_NAME: service_name})
+        resource = Resource(attributes={SERVICE_NAME: service_name, **resource_attrs})
         tracer_provider = TracerProvider(resource=resource)
         processor_type = (
             BatchSpanProcessor

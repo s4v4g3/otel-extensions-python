@@ -68,6 +68,15 @@ class TraceContextCarrier:
         return carrier
 
     @classmethod
+    def attach_from_options(cls, options: TelemetryOptions):
+        traceparent = options.TRACEPARENT
+        carrier = TraceContextCarrier(
+            carrier={"traceparent": traceparent} if traceparent is not None else {}
+        )
+        carrier.attach()
+        return carrier
+
+    @classmethod
     def inject_to_env(cls):
         ctx = TraceContextCarrier()
         if "traceparent" in ctx.carrier:
@@ -142,9 +151,13 @@ def init_telemetry_provider(options: TelemetryOptions = None, **resource_attrs):
     if otlp_endpoint:
         _try_load_trace_provider(options, **resource_attrs)
 
-    # Attach to context from TRACEPARENT environment, but only if we don't already have a context with a span parent
+    # Check if TRACEPARENT is set in options otherwise attach to context from TRACEPARENT
+    # environment, but only if we don't already have a context with a span parent
     if len(context.get_current()) == 0:
-        TraceContextCarrier.attach_from_env()
+        if options.TRACEPARENT:
+            TraceContextCarrier.attach_from_options(options)
+        else:
+            TraceContextCarrier.attach_from_env()
 
 
 def flush_telemetry_data():

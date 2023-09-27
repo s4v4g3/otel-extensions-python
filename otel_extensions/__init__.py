@@ -3,7 +3,6 @@ import os
 from functools import wraps
 import logging
 import inspect
-from pydantic import BaseSettings
 from opentelemetry import context, trace
 from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 import importlib
@@ -27,7 +26,7 @@ tracer_providers_by_service_name: Dict[str, object] = {}
 span_processors = []
 
 
-class TelemetryOptions(BaseSettings):
+class TelemetryOptions:
     """Settings class holding options for telemetry"""
 
     OTEL_EXPORTER_OTLP_ENDPOINT: Optional[str] = None
@@ -37,6 +36,18 @@ class TelemetryOptions(BaseSettings):
     OTEL_SERVICE_NAME: str = ""
     OTEL_PROCESSOR_TYPE: str = "batch"
     TRACEPARENT: Optional[str] = None
+
+    def __init__(self, *_args, **kwargs):
+        all_attrs = [attr for attr in dir(self.__class__) if not attr.startswith("_")]
+        # set default values from env
+        for attr in all_attrs:
+            default_val = getattr(self.__class__, attr)
+            setattr(self, attr, os.environ.get(attr, default_val))
+        # set values from args
+        for kwarg in kwargs:
+            if kwarg not in all_attrs:
+                raise ValueError(f"{kwarg} is an invalid keyword argument")
+            setattr(self, kwarg, kwargs[kwarg])
 
 
 class TraceContextCarrier:
@@ -61,9 +72,7 @@ class TraceContextCarrier:
     @classmethod
     def attach_from_env(cls):
         traceparent = os.environ.get(cls.traceparent_var)
-        carrier = TraceContextCarrier(
-            carrier={"traceparent": traceparent} if traceparent is not None else {}
-        )
+        carrier = TraceContextCarrier(carrier={"traceparent": traceparent} if traceparent is not None else {})
         carrier.attach()
         return carrier
 
@@ -118,9 +127,7 @@ def get_tracer(module_name: str, service_name: str = None):
     """
     global global_tracer_provider, tracer_providers_by_service_name
     tracer_provider = (
-        global_tracer_provider
-        if service_name is None
-        else tracer_providers_by_service_name.get(service_name)
+        global_tracer_provider if service_name is None else tracer_providers_by_service_name.get(service_name)
     )
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", DeprecationWarning)
@@ -169,40 +176,25 @@ def _try_load_trace_provider(options: TelemetryOptions, **resource_attrs):
 
         service_name = options.OTEL_SERVICE_NAME
         if service_name == "":
-            logging.getLogger(__name__).warning(
-                "OTEL_SERVICE_NAME not set; defaulting to 'otel_extensions'"
-            )
+            logging.getLogger(__name__).warning("OTEL_SERVICE_NAME not set; defaulting to 'otel_extensions'")
             service_name = "otel_extensions"
         resource = Resource(attributes={SERVICE_NAME: service_name, **resource_attrs})
         tracer_provider = TracerProvider(resource=resource)
-        processor_type = (
-            BatchSpanProcessor
-            if options.OTEL_PROCESSOR_TYPE == "batch"
-            else SimpleSpanProcessor
-        )
-        if (
-            options.OTEL_EXPORTER_OTLP_CERTIFICATE is not None
-            and "OTEL_EXPORTER_OTLP_CERTIFICATE" not in os.environ
-        ):
-            os.environ[
-                "OTEL_EXPORTER_OTLP_CERTIFICATE"
-            ] = options.OTEL_EXPORTER_OTLP_CERTIFICATE
+        processor_type = BatchSpanProcessor if options.OTEL_PROCESSOR_TYPE == "batch" else SimpleSpanProcessor
+        if options.OTEL_EXPORTER_OTLP_CERTIFICATE is not None and "OTEL_EXPORTER_OTLP_CERTIFICATE" not in os.environ:
+            os.environ["OTEL_EXPORTER_OTLP_CERTIFICATE"] = options.OTEL_EXPORTER_OTLP_CERTIFICATE
         if options.OTEL_EXPORTER_OTLP_PROTOCOL == "grpc":
             from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
                 OTLPSpanExporter as GRPCSpanExporter,
             )
 
-            processor = processor_type(
-                GRPCSpanExporter(endpoint=_get_traces_endpoint(options))
-            )
+            processor = processor_type(GRPCSpanExporter(endpoint=_get_traces_endpoint(options)))
         elif options.OTEL_EXPORTER_OTLP_PROTOCOL == "http/protobuf":
             from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
                 OTLPSpanExporter as HTTPSpanExporter,
             )
 
-            processor = processor_type(
-                HTTPSpanExporter(endpoint=_get_traces_endpoint(options))
-            )
+            processor = processor_type(HTTPSpanExporter(endpoint=_get_traces_endpoint(options)))
         elif options.OTEL_EXPORTER_OTLP_PROTOCOL == "custom":
             (
                 module_name,
@@ -210,9 +202,7 @@ def _try_load_trace_provider(options: TelemetryOptions, **resource_attrs):
                 class_name,
             ) = options.OTEL_EXPORTER_CUSTOM_SPAN_EXPORTER_TYPE.rpartition(".")
             if sep == "":
-                raise RuntimeError(
-                    "Invalid value for OTEL_EXPORTER_CUSTOM_SPAN_EXPORTER_TYPE"
-                )
+                raise RuntimeError("Invalid value for OTEL_EXPORTER_CUSTOM_SPAN_EXPORTER_TYPE")
             module = importlib.import_module(module_name)
             klass = getattr(module, class_name)
             processor = processor_type(klass(options=options))
@@ -228,11 +218,7 @@ def _try_load_trace_provider(options: TelemetryOptions, **resource_attrs):
 
 
 def _get_traces_endpoint(options: TelemetryOptions):
-    path = (
-        "v1/traces"
-        if options.OTEL_EXPORTER_OTLP_ENDPOINT.endswith("/")
-        else "/v1/traces"
-    )
+    path = "v1/traces" if options.OTEL_EXPORTER_OTLP_ENDPOINT.endswith("/") else "/v1/traces"
     endpoint = f"{options.OTEL_EXPORTER_OTLP_ENDPOINT}{path}"
     return endpoint
 
@@ -278,17 +264,13 @@ class Instrumented:
 
         @wraps(wrapped_function)
         def new_f(*args, **kwargs):
-            with get_tracer(
-                module_name, service_name=self.service_name
-            ).start_as_current_span(span_name) as span:
+            with get_tracer(module_name, service_name=self.service_name).start_as_current_span(span_name) as span:
                 span.set_attributes(self.span_attributes)
                 return wrapped_function(*args, **kwargs)
 
         @wraps(wrapped_function)
         async def new_f_async(*args, **kwargs):
-            with get_tracer(
-                module_name, service_name=self.service_name
-            ).start_as_current_span(span_name) as span:
+            with get_tracer(module_name, service_name=self.service_name).start_as_current_span(span_name) as span:
                 span.set_attributes(self.span_attributes)
                 return await wrapped_function(*args, **kwargs)
 
@@ -315,9 +297,7 @@ def instrumented(
                          of `init_telemetry_provider`
     @param span_attributes: optional dictionary of attributes to be set on the span
     """
-    inst = Instrumented(
-        span_name=span_name, service_name=service_name, span_attributes=span_attributes
-    )
+    inst = Instrumented(span_name=span_name, service_name=service_name, span_attributes=span_attributes)
     if wrapped_function:
         return inst(wrapped_function)
     return inst

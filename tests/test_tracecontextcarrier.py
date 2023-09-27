@@ -56,8 +56,8 @@ def test_tracecontextcarrier():
 
     test_fn()
 
-def test_context_injection():
 
+def test_context_injection():
     @instrumented
     def test_fn():
         @inject_context_to_env
@@ -66,5 +66,3 @@ def test_context_injection():
 
     with temporary_environment_variable_setter("TRACEPARENT", None):
         test_fn()
-
-

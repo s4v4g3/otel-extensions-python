@@ -59,7 +59,8 @@ def test_tracecontextcarrier():
 def test_tracecontextcarrier_attach_from_options():
     @instrumented
     def test_fn():
-        assert (orig_ctx_len := len(context.get_current())) > 0
+        orig_ctx_len = len(context.get_current())
+        assert orig_ctx_len > 0
         orig_ctx = TraceContextCarrier()
         opts = TelemetryOptions()
         _ = TraceContextCarrier.attach_from_options(opts)

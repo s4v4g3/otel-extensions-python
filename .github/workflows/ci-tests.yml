@@ -18,6 +18,9 @@ jobs:
       matrix:
         python-version: [ py36, py37, py38, py39, py310, py311 ]
         os: [ ubuntu-20.04, windows-2019 ]
+        exclude:
+          - os: windows-2019
+            python-version: py36
     steps:
       - name: Checkout Core Repo @ SHA - ${{ github.sha }}
         uses: actions/checkout@v2

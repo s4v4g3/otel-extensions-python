@@ -1,3 +1,2 @@
 opentelemetry-api
 opentelemetry-sdk
-pydantic==1.*

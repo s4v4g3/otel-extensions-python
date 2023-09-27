@@ -1,6 +1,5 @@
 import os
-
-from otel_extensions import TraceContextCarrier, instrumented, inject_context_to_env
+from otel_extensions import TraceContextCarrier, instrumented, inject_context_to_env, TelemetryOptions
 from opentelemetry import context
 from contextlib import contextmanager
 
@@ -56,8 +55,24 @@ def test_tracecontextcarrier():
 
     test_fn()
 
-def test_context_injection():
 
+def test_tracecontextcarrier_attach_from_options():
+    @instrumented
+    def test_fn():
+        orig_ctx_len = len(context.get_current())
+        assert orig_ctx_len > 0
+        orig_ctx = TraceContextCarrier()
+        opts = TelemetryOptions()
+        _ = TraceContextCarrier.attach_from_options(opts)
+        assert len(context.get_current()) == 0
+        opts = TelemetryOptions(TRACEPARENT=orig_ctx.carrier["traceparent"])
+        _ = TraceContextCarrier.attach_from_options(opts)
+        assert len(context.get_current()) == orig_ctx_len
+
+    test_fn()
+
+
+def test_context_injection():
     @instrumented
     def test_fn():
         @inject_context_to_env
@@ -66,5 +81,3 @@ def test_context_injection():
 
     with temporary_environment_variable_setter("TRACEPARENT", None):
         test_fn()
-
-

@@ -1,4 +1,4 @@
-from typing import Callable, Optional, Dict, Any, TYPE_CHECKING, Union
+from typing import Callable, Optional, Dict, Any, TYPE_CHECKING, Union, cast, TypeVar, overload
 import os
 from functools import wraps
 import logging
@@ -12,6 +12,7 @@ import warnings
 from opentelemetry.util.types import AttributeValue as SpanAttributeValue
 
 CallableType = Callable[..., Any]
+DecoratedFuncType = TypeVar("DecoratedFuncType", bound=CallableType)
 
 __all__ = [
     "TelemetryOptions",
@@ -279,7 +280,7 @@ class Instrumented:
         self.service_name = service_name
         self.span_attributes = span_attributes if span_attributes is not None else {}
 
-    def __call__(self, wrapped_function: CallableType) -> CallableType:
+    def __call__(self, wrapped_function: DecoratedFuncType) -> DecoratedFuncType:
         module = inspect.getmodule(wrapped_function)
         is_async = inspect.iscoroutinefunction(wrapped_function)
         module_name = __name__
@@ -299,16 +300,31 @@ class Instrumented:
                 span.set_attributes(self.span_attributes)
                 return await wrapped_function(*args, **kwargs)
 
-        return new_f_async if is_async else new_f
+        return cast(DecoratedFuncType, new_f_async) if is_async else cast(DecoratedFuncType, new_f)
 
 
+@overload
+def instrumented(wrapped_function: DecoratedFuncType) -> DecoratedFuncType:
+    ...
+
+
+@overload
 def instrumented(
-    wrapped_function: Optional[CallableType] = None,
     *,
     span_name: Optional[str] = None,
     service_name: Optional[str] = None,
     span_attributes: Optional[Dict[str, SpanAttributeValue]] = None,
-) -> Union[CallableType, Instrumented]:
+) -> Instrumented:
+    ...
+
+
+def instrumented(
+    wrapped_function: Optional[DecoratedFuncType] = None,
+    *,
+    span_name: Optional[str] = None,
+    service_name: Optional[str] = None,
+    span_attributes: Optional[Dict[str, SpanAttributeValue]] = None,
+) -> Union[DecoratedFuncType, Instrumented]:
     """
     Decorator to enable opentelemetry instrumentation on a function.
 

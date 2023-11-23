@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false  # ensures the entire test matrix is run, even if one permutation fails
       matrix:
-        python-version: [ py37, py38, py39, py310, py311, py312, pypy3 ]
+        python-version: [ py37, py38, py39, py310, py311, py312 ]
         os: [ ubuntu-20.04, windows-2019 ]
 
     steps:

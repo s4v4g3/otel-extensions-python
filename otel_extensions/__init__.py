@@ -1,13 +1,17 @@
-from typing import Callable, Optional, Dict
+from typing import Callable, Optional, Dict, Any, TYPE_CHECKING, Union
 import os
 from functools import wraps
 import logging
 import inspect
 from opentelemetry import context, trace
+from opentelemetry.trace import Tracer
+from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 import importlib
 import warnings
 from opentelemetry.util.types import AttributeValue as SpanAttributeValue
+
+CallableType = Callable[..., Any]
 
 __all__ = [
     "TelemetryOptions",
@@ -21,9 +25,8 @@ __all__ = [
     "inject_context_to_env",
 ]
 
-global_tracer_provider: Optional[object] = None
-tracer_providers_by_service_name: Dict[str, object] = {}
-span_processors = []
+global_tracer_provider: Optional[TracerProvider] = None
+tracer_providers_by_service_name: Dict[str, TracerProvider] = {}
 
 
 class TelemetryOptions:
@@ -37,7 +40,7 @@ class TelemetryOptions:
     OTEL_PROCESSOR_TYPE: str = "batch"
     TRACEPARENT: Optional[str] = None
 
-    def __init__(self, *_args, **kwargs):
+    def __init__(self, *_args: Any, **kwargs: Any) -> None:
         all_attrs = [attr for attr in dir(self.__class__) if not attr.startswith("_")]
         # set default values from env
         for attr in all_attrs:
@@ -55,76 +58,81 @@ class TraceContextCarrier:
 
     traceparent_var = "TRACEPARENT"
 
-    def __init__(self, carrier: Optional[dict] = None):
-        self.token = None
-        self.carrier = carrier
+    def __init__(self, carrier: Optional[Dict[str, str]] = None):
+        self.token: Optional[object] = None
         if carrier is None:
-            self.carrier = {}
-            TraceContextTextMapPropagator().inject(self.carrier)
+            carrier = {}
+            TraceContextTextMapPropagator().inject(carrier)
+        self.carrier: Dict[str, str] = carrier
 
-    def __enter__(self):
+    def __enter__(self) -> "TraceContextCarrier":
         if self.token is None:
             self.token = self.__attach(self.carrier)
+        return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         self.detach()
 
     @classmethod
-    def attach_from_env(cls):
+    def attach_from_env(cls) -> "TraceContextCarrier":
         traceparent = os.environ.get(cls.traceparent_var)
         carrier = TraceContextCarrier(carrier={"traceparent": traceparent} if traceparent is not None else {})
         carrier.attach()
         return carrier
 
     @classmethod
-    def attach_from_options(cls, options: TelemetryOptions):
+    def attach_from_options(cls, options: TelemetryOptions) -> "TraceContextCarrier":
         traceparent = options.TRACEPARENT
-        carrier = TraceContextCarrier(
-            carrier={"traceparent": traceparent} if traceparent is not None else {}
-        )
+        carrier = TraceContextCarrier(carrier={"traceparent": traceparent} if traceparent is not None else {})
         carrier.attach()
         return carrier
 
     @classmethod
-    def inject_to_env(cls):
+    def inject_to_env(cls) -> None:
         ctx = TraceContextCarrier()
         if "traceparent" in ctx.carrier:
             os.environ[cls.traceparent_var] = ctx.carrier["traceparent"]
 
-    def attach(self):
+    def attach(self) -> None:
         self.token = self.__attach(self.carrier)
 
-    def detach(self):
+    def detach(self) -> None:
         if self.token is not None:
             context.detach(self.token)
             self.token = None
 
-    def __eq__(self, other):
-        return self.carrier == other.carrier
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, TraceContextCarrier) and self.carrier == other.carrier
 
     @classmethod
-    def __attach(cls, carrier):
+    def __attach(cls, carrier: Dict[str, str]) -> object:
         token = context.attach(TraceContextTextMapPropagator().extract(carrier=carrier))
         return token
 
 
-class TraceEventLogHandler(logging.StreamHandler):
+if TYPE_CHECKING:
+    BaseStreamHandler = logging.StreamHandler["TraceEventLogHandler"]
+else:
+    BaseStreamHandler = logging.StreamHandler
+
+
+class TraceEventLogHandler(BaseStreamHandler):
     """log handler class that adds log messages as events in the current span"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(stream=self)
         self.name = "TraceEventLogHandler"
 
-    def write(self, msg: str):
+    def write(self, msg: str) -> None:
         if msg != self.terminator:
             current_span = trace.get_current_span()
             current_span.add_event(msg)
 
-    def flush(self):
+    def flush(self) -> None:
         """no need to flush"""
 
 
-def get_tracer(module_name: str, service_name: str = None):
+def get_tracer(module_name: str, service_name: Optional[str] = None) -> Tracer:
     """
     Get the `Tracer` for the specified module and service name
     Args:
@@ -143,7 +151,7 @@ def get_tracer(module_name: str, service_name: str = None):
         return trace.get_tracer(module_name, tracer_provider=tracer_provider)
 
 
-def init_telemetry_provider(options: TelemetryOptions = None, **resource_attrs):
+def init_telemetry_provider(options: Optional[TelemetryOptions] = None, **resource_attrs: Any) -> None:
     """
     Initialize telemetry collection for a service, and inherits any trace context
     set from the TRACEPARENT environment variable
@@ -167,7 +175,7 @@ def init_telemetry_provider(options: TelemetryOptions = None, **resource_attrs):
             TraceContextCarrier.attach_from_env()
 
 
-def flush_telemetry_data():
+def flush_telemetry_data() -> None:
     """Forces a flush of all span exporters attached to trace providers"""
     global global_tracer_provider, tracer_providers_by_service_name
     if global_tracer_provider is not None:
@@ -177,7 +185,7 @@ def flush_telemetry_data():
         provider.force_flush()  # noqa
 
 
-def _try_load_trace_provider(options: TelemetryOptions, **resource_attrs):
+def _try_load_trace_provider(options: TelemetryOptions, **resource_attrs: Any) -> None:
     global global_tracer_provider, tracer_providers_by_service_name
     try:
         from opentelemetry.sdk.resources import SERVICE_NAME, Resource
@@ -230,16 +238,20 @@ def _try_load_trace_provider(options: TelemetryOptions, **resource_attrs):
         pass
 
 
-def _get_traces_endpoint(options: TelemetryOptions):
-    path = "v1/traces" if options.OTEL_EXPORTER_OTLP_ENDPOINT.endswith("/") else "/v1/traces"
+def _get_traces_endpoint(options: TelemetryOptions) -> str:
+    path = (
+        "v1/traces"
+        if options.OTEL_EXPORTER_OTLP_ENDPOINT and options.OTEL_EXPORTER_OTLP_ENDPOINT.endswith("/")
+        else "/v1/traces"
+    )
     endpoint = f"{options.OTEL_EXPORTER_OTLP_ENDPOINT}{path}"
     return endpoint
 
 
 class ContextInjector:
-    def __call__(self, wrapped_function: Callable) -> Callable:
+    def __call__(self, wrapped_function: CallableType) -> CallableType:
         @wraps(wrapped_function)
-        def new_f(*args, **kwargs):
+        def new_f(*args: Any, **kwargs: Any) -> Any:
             prev_env = os.environ.get(TraceContextCarrier.traceparent_var)
             TraceContextCarrier.inject_to_env()
             try:
@@ -251,7 +263,7 @@ class ContextInjector:
         return new_f
 
 
-def inject_context_to_env(wrapped_function: Callable):
+def inject_context_to_env(wrapped_function: CallableType) -> CallableType:
     injector = ContextInjector()
     return injector(wrapped_function)
 
@@ -259,15 +271,15 @@ def inject_context_to_env(wrapped_function: Callable):
 class Instrumented:
     def __init__(
         self,
-        span_name: str = None,
-        service_name: str = None,
+        span_name: Optional[str] = None,
+        service_name: Optional[str] = None,
         span_attributes: Optional[Dict[str, SpanAttributeValue]] = None,
-    ):
+    ) -> None:
         self.span_name = span_name
         self.service_name = service_name
         self.span_attributes = span_attributes if span_attributes is not None else {}
 
-    def __call__(self, wrapped_function: Callable) -> Callable:
+    def __call__(self, wrapped_function: CallableType) -> CallableType:
         module = inspect.getmodule(wrapped_function)
         is_async = inspect.iscoroutinefunction(wrapped_function)
         module_name = __name__
@@ -276,13 +288,13 @@ class Instrumented:
         span_name = self.span_name or wrapped_function.__qualname__
 
         @wraps(wrapped_function)
-        def new_f(*args, **kwargs):
+        def new_f(*args: Any, **kwargs: Any) -> Any:
             with get_tracer(module_name, service_name=self.service_name).start_as_current_span(span_name) as span:
                 span.set_attributes(self.span_attributes)
                 return wrapped_function(*args, **kwargs)
 
         @wraps(wrapped_function)
-        async def new_f_async(*args, **kwargs):
+        async def new_f_async(*args: Any, **kwargs: Any) -> Any:
             with get_tracer(module_name, service_name=self.service_name).start_as_current_span(span_name) as span:
                 span.set_attributes(self.span_attributes)
                 return await wrapped_function(*args, **kwargs)
@@ -291,12 +303,12 @@ class Instrumented:
 
 
 def instrumented(
-    wrapped_function: Optional[Callable] = None,
+    wrapped_function: Optional[CallableType] = None,
     *,
     span_name: Optional[str] = None,
     service_name: Optional[str] = None,
     span_attributes: Optional[Dict[str, SpanAttributeValue]] = None,
-):
+) -> Union[CallableType, Instrumented]:
     """
     Decorator to enable opentelemetry instrumentation on a function.
 

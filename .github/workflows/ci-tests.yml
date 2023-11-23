@@ -4,7 +4,6 @@ jobs:
   build:
     env:
       # We use these variables to convert between tox and GHA version literals
-      py36: 3.6
       py37: 3.7
       py38: 3.8
       py39: 3.9
@@ -16,11 +15,9 @@ jobs:
     strategy:
       fail-fast: false  # ensures the entire test matrix is run, even if one permutation fails
       matrix:
-        python-version: [ py36, py37, py38, py39, py310, py311 ]
+        python-version: [ py37, py38, py39, py310, py311 ]
         os: [ ubuntu-20.04, windows-2019 ]
-        exclude:
-          - os: windows-2019
-            python-version: py36
+
     steps:
       - name: Checkout Core Repo @ SHA - ${{ github.sha }}
         uses: actions/checkout@v2

@@ -5,13 +5,13 @@ import random
 
 
 @instrumented
-def foobar():
+def foobar() -> None:
     # automatically creates a "foobar" span due to "instrumented" decorator
     time.sleep(random.randint(0, 10) / 10.0)
 
 
 @instrumented(span_name="my custom span name")
-def bar():
+def bar() -> None:
     # automatically creates a span due to "instrumented" decorator, using a custom name
 
     # set an attribute for the span
@@ -24,7 +24,7 @@ def bar():
 
 
 @instrumented
-def foo():
+def foo() -> None:
     # automatically creates a span due to "instrumented" decorator
     for _ in range(0, random.randint(10, 20)):
         bar()

@@ -40,7 +40,7 @@ def main() -> int:
 if __name__ == "__main__":
     # one-time collection setup -- assumes a collector agent running locally with an http receiver on port 4318
     options = TelemetryOptions(
-        SERVICE_NAME="OpenTelemetry Example",
+        OTEL_SERVICE_NAME="OpenTelemetry Example",
         OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:4318",
         OTEL_EXPORTER_OTLP_PROTOCOL="http/protobuf",
     )

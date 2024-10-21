@@ -360,7 +360,7 @@ class Instrumented:
             else cast(DecoratedFuncType, new_f)
         )
 
-    def _module_allowed(self, func_module_path):
+    def _module_allowed(self, func_module_path: str) -> bool:
         if self.process_modules is None or self.process_modules == "":
             return True
 

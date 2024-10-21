@@ -279,6 +279,7 @@ class Instrumented:
         self.span_name = span_name
         self.service_name = service_name
         self.span_attributes = span_attributes if span_attributes is not None else {}
+        self.process_modules = os.environ.get("OTEL_PROCESS_MODULES", "")
 
     def __call__(self, wrapped_function: DecoratedFuncType) -> DecoratedFuncType:
         module = inspect.getmodule(wrapped_function)
@@ -288,19 +289,42 @@ class Instrumented:
             module_name = module.__name__
         span_name = self.span_name or wrapped_function.__qualname__
 
+        create_span = True
+        if hasattr(wrapped_function, '__module__'):
+            func_module_path = wrapped_function.__module__
+            self.span_attributes['module.name'] = func_module_path
+            create_span = self._module_allowed(func_module_path)
+
         @wraps(wrapped_function)
         def new_f(*args: Any, **kwargs: Any) -> Any:
-            with get_tracer(module_name, service_name=self.service_name).start_as_current_span(span_name) as span:
-                span.set_attributes(self.span_attributes)
+            if create_span:
+                with get_tracer(module_name, service_name=self.service_name).start_as_current_span(span_name) as span:
+                    span.set_attributes(self.span_attributes)
+                    return wrapped_function(*args, **kwargs)
+            else:
                 return wrapped_function(*args, **kwargs)
 
         @wraps(wrapped_function)
         async def new_f_async(*args: Any, **kwargs: Any) -> Any:
-            with get_tracer(module_name, service_name=self.service_name).start_as_current_span(span_name) as span:
-                span.set_attributes(self.span_attributes)
+            if create_span:
+                with get_tracer(module_name, service_name=self.service_name).start_as_current_span(span_name) as span:
+                    span.set_attributes(self.span_attributes)
+                    return await wrapped_function(*args, **kwargs)
+            else:
                 return await wrapped_function(*args, **kwargs)
 
         return cast(DecoratedFuncType, new_f_async) if is_async else cast(DecoratedFuncType, new_f)
+
+    def _module_allowed(self, func_module_path):
+        if self.process_modules is None or self.process_modules == "":
+            return True
+
+        modules = self.process_modules.split(",")
+        module_path = str(func_module_path).lower()
+        for mod in modules:
+            if str(mod).lower() in module_path:
+                return True
+        return False
 
 
 @overload

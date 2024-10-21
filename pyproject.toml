@@ -14,7 +14,6 @@ classifiers = [
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.7",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
@@ -26,7 +25,7 @@ classifiers = [
     "Topic :: Utilities",
 ]
 keywords = ["otel", "opentelemetry", "debug"]
-requires-python = ">=3.7"
+requires-python = ">=3.8"
 dependencies = [
     "opentelemetry-api",
     "opentelemetry-sdk",
@@ -92,7 +91,7 @@ xfail_strict = true
 junit_family = "xunit2"
 
 [tool.mypy]
-python_version = "3.7"
+python_version = "3.8"
 disallow_any_generics = true
 disallow_subclassing_any = true
 disallow_untyped_calls = true

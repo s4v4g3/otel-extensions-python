@@ -2,6 +2,134 @@
 requires = ["setuptools >= 44.0.0", "wheel >= 0.30"]
 build-backend = "setuptools.build_meta"
 
-[tool.black]
-line-length = 120
-include = '\.pyi?$'
+[project]
+name = "otel-extensions"
+description = "Python extensions for OpenTelemetry"
+maintainers = [{name = "Joe Savage", email = "joe.savage@gmail.com"}]
+version = "1.0.3"
+license = {text = "Apache-2.0"}
+classifiers = [
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: Software Development :: Testing",
+    "Topic :: Utilities",
+]
+keywords = ["otel", "opentelemetry", "debug"]
+requires-python = ">=3.7"
+dependencies = [
+    "opentelemetry-api",
+    "opentelemetry-sdk",
+]
+
+[project.readme]
+file = "README.md"
+content-type = "text/markdown"
+
+[project.urls]
+Homepage = "https://github.com/s4v4g3/otel-extensions-python"
+Source = "https://github.com/s4v4g3/otel-extensions-python"
+Tracker = "https://github.com/s4v4g3/otel-extensions-python/issues"
+
+[tool.setuptools]
+zip-safe = true
+platforms = ["any"]
+license-files = ["LICENSE"]
+include-package-data = false
+
+[tool.setuptools.packages.find]
+exclude = [
+    "example",
+    "tests",
+    "tools",
+]
+namespaces = false
+
+[tool.setuptools.package-data]
+otel_extensions = ["py.typed"]
+
+[tool.distutils.sdist]
+formats = "gztar"
+
+[tool.distutils.bdist_wheel]
+universal = true
+
+[tool.coverage.report]
+fail_under = 100
+skip_covered = true
+show_missing = true
+omit = ["example/example.py"]
+
+[tool.coverage.html]
+show_contexts = true
+skip_covered = false
+skip_empty = false
+
+[tool.coverage.paths]
+source = [
+    "src",
+    ".tox*/*/lib/python*/site-packages",
+    ".tox*/pypy*/site-packages",
+    ".tox*\\*\\Lib\\site-packages\\",
+    "*/src",
+    '*\src',
+]
+
+[tool.pytest.ini_options]
+addopts = "-ra --showlocals -vv"
+testpaths = ["tests"]
+xfail_strict = true
+junit_family = "xunit2"
+
+[tool.mypy]
+python_version = "3.7"
+disallow_any_generics = true
+disallow_subclassing_any = true
+disallow_untyped_calls = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+disallow_untyped_decorators = true
+show_error_codes = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = false
+warn_no_return = true
+warn_return_any = true
+implicit_reexport = false
+strict_equality = true
+warn_unused_configs = true
+pretty = true
+
+[tool.ruff]
+fix = true
+line-length = 88
+target-version = "py38"
+
+[tool.ruff.lint]
+select = [
+    "E", # pycodestyle errors
+    "W", # pycodestyle warnings
+    "F", # pyflakes
+    "I", # isort
+    "C", # flake8-comprehensions
+    "B", # flake8-bugbear
+    "Q", # flake8-quotes
+    "UP",# pyupgrade
+
+]
+ignore = [
+    "E501", # line too long
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"

@@ -1,7 +1,7 @@
-import os
-from otel_extensions import TraceEventLogHandler, instrumented
 from opentelemetry import trace
 from opentelemetry.sdk.trace import ReadableSpan
+
+from otel_extensions import TraceEventLogHandler, instrumented
 
 
 def test_traceloghandler():

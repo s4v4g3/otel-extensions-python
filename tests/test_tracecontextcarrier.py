@@ -1,7 +1,14 @@
 import os
-from otel_extensions import TraceContextCarrier, instrumented, inject_context_to_env, TelemetryOptions
-from opentelemetry import context
 from contextlib import contextmanager
+
+from opentelemetry import context
+
+from otel_extensions import (
+    TelemetryOptions,
+    TraceContextCarrier,
+    inject_context_to_env,
+    instrumented,
+)
 
 
 @contextmanager

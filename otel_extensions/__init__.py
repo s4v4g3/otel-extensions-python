@@ -1,14 +1,25 @@
-from typing import Callable, Optional, Dict, Any, TYPE_CHECKING, Union, cast, TypeVar, overload
-import os
-from functools import wraps
-import logging
-import inspect
-from opentelemetry import context, trace
-from opentelemetry.trace import Tracer
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 import importlib
+import inspect
+import logging
+import os
 import warnings
+from functools import wraps
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    Optional,
+    TypeVar,
+    Union,
+    cast,
+    overload,
+)
+
+from opentelemetry import context, trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.trace import Tracer
+from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 from opentelemetry.util.types import AttributeValue as SpanAttributeValue
 
 CallableType = Callable[..., Any]
@@ -77,14 +88,18 @@ class TraceContextCarrier:
     @classmethod
     def attach_from_env(cls) -> "TraceContextCarrier":
         traceparent = os.environ.get(cls.traceparent_var)
-        carrier = TraceContextCarrier(carrier={"traceparent": traceparent} if traceparent is not None else {})
+        carrier = TraceContextCarrier(
+            carrier={"traceparent": traceparent} if traceparent is not None else {}
+        )
         carrier.attach()
         return carrier
 
     @classmethod
     def attach_from_options(cls, options: TelemetryOptions) -> "TraceContextCarrier":
         traceparent = options.TRACEPARENT
-        carrier = TraceContextCarrier(carrier={"traceparent": traceparent} if traceparent is not None else {})
+        carrier = TraceContextCarrier(
+            carrier={"traceparent": traceparent} if traceparent is not None else {}
+        )
         carrier.attach()
         return carrier
 
@@ -145,14 +160,18 @@ def get_tracer(module_name: str, service_name: Optional[str] = None) -> Tracer:
     """
     global global_tracer_provider, tracer_providers_by_service_name
     tracer_provider = (
-        global_tracer_provider if service_name is None else tracer_providers_by_service_name.get(service_name)
+        global_tracer_provider
+        if service_name is None
+        else tracer_providers_by_service_name.get(service_name)
     )
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", DeprecationWarning)
         return trace.get_tracer(module_name, tracer_provider=tracer_provider)
 
 
-def init_telemetry_provider(options: Optional[TelemetryOptions] = None, **resource_attrs: Any) -> None:
+def init_telemetry_provider(
+    options: Optional[TelemetryOptions] = None, **resource_attrs: Any
+) -> None:
     """
     Initialize telemetry collection for a service, and inherits any trace context
     set from the TRACEPARENT environment variable
@@ -192,31 +211,46 @@ def _try_load_trace_provider(options: TelemetryOptions, **resource_attrs: Any) -
         from opentelemetry.sdk.resources import SERVICE_NAME, Resource
         from opentelemetry.sdk.trace import TracerProvider
         from opentelemetry.sdk.trace.export import (
-            SimpleSpanProcessor,
             BatchSpanProcessor,
+            SimpleSpanProcessor,
         )
 
         service_name = options.OTEL_SERVICE_NAME
         if service_name == "":
-            logging.getLogger(__name__).warning("OTEL_SERVICE_NAME not set; defaulting to 'otel_extensions'")
+            logging.getLogger(__name__).warning(
+                "OTEL_SERVICE_NAME not set; defaulting to 'otel_extensions'"
+            )
             service_name = "otel_extensions"
         resource = Resource(attributes={SERVICE_NAME: service_name, **resource_attrs})
         tracer_provider = TracerProvider(resource=resource)
-        processor_type = BatchSpanProcessor if options.OTEL_PROCESSOR_TYPE == "batch" else SimpleSpanProcessor
-        if options.OTEL_EXPORTER_OTLP_CERTIFICATE is not None and "OTEL_EXPORTER_OTLP_CERTIFICATE" not in os.environ:
-            os.environ["OTEL_EXPORTER_OTLP_CERTIFICATE"] = options.OTEL_EXPORTER_OTLP_CERTIFICATE
+        processor_type = (
+            BatchSpanProcessor
+            if options.OTEL_PROCESSOR_TYPE == "batch"
+            else SimpleSpanProcessor
+        )
+        if (
+            options.OTEL_EXPORTER_OTLP_CERTIFICATE is not None
+            and "OTEL_EXPORTER_OTLP_CERTIFICATE" not in os.environ
+        ):
+            os.environ["OTEL_EXPORTER_OTLP_CERTIFICATE"] = (
+                options.OTEL_EXPORTER_OTLP_CERTIFICATE
+            )
         if options.OTEL_EXPORTER_OTLP_PROTOCOL == "grpc":
             from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
                 OTLPSpanExporter as GRPCSpanExporter,
             )
 
-            processor = processor_type(GRPCSpanExporter(endpoint=_get_traces_endpoint(options)))
+            processor = processor_type(
+                GRPCSpanExporter(endpoint=_get_traces_endpoint(options))
+            )
         elif options.OTEL_EXPORTER_OTLP_PROTOCOL == "http/protobuf":
             from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
                 OTLPSpanExporter as HTTPSpanExporter,
             )
 
-            processor = processor_type(HTTPSpanExporter(endpoint=_get_traces_endpoint(options)))
+            processor = processor_type(
+                HTTPSpanExporter(endpoint=_get_traces_endpoint(options))
+            )
         elif options.OTEL_EXPORTER_OTLP_PROTOCOL == "custom":
             (
                 module_name,
@@ -224,7 +258,9 @@ def _try_load_trace_provider(options: TelemetryOptions, **resource_attrs: Any) -
                 class_name,
             ) = options.OTEL_EXPORTER_CUSTOM_SPAN_EXPORTER_TYPE.rpartition(".")
             if sep == "":
-                raise RuntimeError("Invalid value for OTEL_EXPORTER_CUSTOM_SPAN_EXPORTER_TYPE")
+                raise RuntimeError(
+                    "Invalid value for OTEL_EXPORTER_CUSTOM_SPAN_EXPORTER_TYPE"
+                )
             module = importlib.import_module(module_name)
             klass = getattr(module, class_name)
             processor = processor_type(klass(options=options))
@@ -242,7 +278,8 @@ def _try_load_trace_provider(options: TelemetryOptions, **resource_attrs: Any) -
 def _get_traces_endpoint(options: TelemetryOptions) -> str:
     path = (
         "v1/traces"
-        if options.OTEL_EXPORTER_OTLP_ENDPOINT and options.OTEL_EXPORTER_OTLP_ENDPOINT.endswith("/")
+        if options.OTEL_EXPORTER_OTLP_ENDPOINT
+        and options.OTEL_EXPORTER_OTLP_ENDPOINT.endswith("/")
         else "/v1/traces"
     )
     endpoint = f"{options.OTEL_EXPORTER_OTLP_ENDPOINT}{path}"
@@ -290,15 +327,17 @@ class Instrumented:
         span_name = self.span_name or wrapped_function.__qualname__
 
         create_span = True
-        if hasattr(wrapped_function, '__module__'):
+        if hasattr(wrapped_function, "__module__"):
             func_module_path = wrapped_function.__module__
-            self.span_attributes['module.name'] = func_module_path
+            self.span_attributes["module.name"] = func_module_path
             create_span = self._module_allowed(func_module_path)
 
         @wraps(wrapped_function)
         def new_f(*args: Any, **kwargs: Any) -> Any:
             if create_span:
-                with get_tracer(module_name, service_name=self.service_name).start_as_current_span(span_name) as span:
+                with get_tracer(
+                    module_name, service_name=self.service_name
+                ).start_as_current_span(span_name) as span:
                     span.set_attributes(self.span_attributes)
                     return wrapped_function(*args, **kwargs)
             else:
@@ -307,13 +346,19 @@ class Instrumented:
         @wraps(wrapped_function)
         async def new_f_async(*args: Any, **kwargs: Any) -> Any:
             if create_span:
-                with get_tracer(module_name, service_name=self.service_name).start_as_current_span(span_name) as span:
+                with get_tracer(
+                    module_name, service_name=self.service_name
+                ).start_as_current_span(span_name) as span:
                     span.set_attributes(self.span_attributes)
                     return await wrapped_function(*args, **kwargs)
             else:
                 return await wrapped_function(*args, **kwargs)
 
-        return cast(DecoratedFuncType, new_f_async) if is_async else cast(DecoratedFuncType, new_f)
+        return (
+            cast(DecoratedFuncType, new_f_async)
+            if is_async
+            else cast(DecoratedFuncType, new_f)
+        )
 
     def _module_allowed(self, func_module_path):
         if self.process_modules is None or self.process_modules == "":
@@ -328,8 +373,7 @@ class Instrumented:
 
 
 @overload
-def instrumented(wrapped_function: DecoratedFuncType) -> DecoratedFuncType:
-    ...
+def instrumented(wrapped_function: DecoratedFuncType) -> DecoratedFuncType: ...
 
 
 @overload
@@ -338,8 +382,7 @@ def instrumented(
     span_name: Optional[str] = None,
     service_name: Optional[str] = None,
     span_attributes: Optional[Dict[str, SpanAttributeValue]] = None,
-) -> Instrumented:
-    ...
+) -> Instrumented: ...
 
 
 def instrumented(
@@ -362,7 +405,9 @@ def instrumented(
                          of `init_telemetry_provider`
     @param span_attributes: optional dictionary of attributes to be set on the span
     """
-    inst = Instrumented(span_name=span_name, service_name=service_name, span_attributes=span_attributes)
+    inst = Instrumented(
+        span_name=span_name, service_name=service_name, span_attributes=span_attributes
+    )
     if wrapped_function:
         return inst(wrapped_function)
     return inst

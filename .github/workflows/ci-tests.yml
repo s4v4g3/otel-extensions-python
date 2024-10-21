@@ -20,9 +20,9 @@ jobs:
 
     steps:
       - name: Checkout Core Repo @ SHA - ${{ github.sha }}
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
       - name: Set up Python ${{ env[matrix.python-version] }}
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ env[matrix.python-version] }}
           architecture: 'x64'
@@ -30,7 +30,7 @@ jobs:
         run: pip install tox==4.* -U
       - name: Cache tox environment
         # Preserves .tox directory between runs for faster installs
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         with:
           path: |
             .tox

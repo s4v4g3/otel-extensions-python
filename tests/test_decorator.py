@@ -1,9 +1,11 @@
 import os
 from collections.abc import Sequence
+from typing import cast
 
 import pytest
 from opentelemetry import trace
 from opentelemetry.sdk.trace import ReadableSpan
+from opentelemetry.trace import Span
 
 from otel_extensions import instrumented
 
@@ -111,10 +113,17 @@ def otel_process_modules(request):
 def test_decorator_with_module_filter(otel_process_modules):
     @instrumented(span_name="decorated_function_with_module_filter")
     def decorated_local_function():
-        span: ReadableSpan = trace.get_current_span()  # noqa
+        span: Span = trace.get_current_span()
         if otel_process_modules == "foo":
-            assert span.name == "test_decorator_with_module_filter[foo] (call)"
+            if span.is_recording():
+                assert (
+                    cast(ReadableSpan, span).name
+                    == "test_decorator_with_module_filter[foo] (call)"
+                )
         else:
-            assert span.name == "decorated_function_with_module_filter"
+            assert span.is_recording()
+            assert (
+                cast(ReadableSpan, span).name == "decorated_function_with_module_filter"
+            )
 
     decorated_local_function()

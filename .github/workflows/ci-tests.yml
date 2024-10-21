@@ -4,26 +4,25 @@ jobs:
   build:
     env:
       # We use these variables to convert between tox and GHA version literals
-      py37: 3.7
       py38: 3.8
       py39: 3.9
       py310: "3.10"
       py311: "3.11"
       py312: "3.12"
-      pypy3: pypy-3.7
+      py313: "3.13"
       RUN_MATRIX_COMBINATION: ${{ matrix.python-version }}-${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false  # ensures the entire test matrix is run, even if one permutation fails
       matrix:
-        python-version: [ py37, py38, py39, py310, py311, py312 ]
-        os: [ ubuntu-20.04, windows-2019 ]
+        python-version: [ py38, py39, py310, py311, py312, py313 ]
+        os: [ ubuntu-22.04, windows-2019 ]
 
     steps:
       - name: Checkout Core Repo @ SHA - ${{ github.sha }}
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
       - name: Set up Python ${{ env[matrix.python-version] }}
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ env[matrix.python-version] }}
           architecture: 'x64'
@@ -31,7 +30,7 @@ jobs:
         run: pip install tox==4.* -U
       - name: Cache tox environment
         # Preserves .tox directory between runs for faster installs
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         with:
           path: |
             .tox

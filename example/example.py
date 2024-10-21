@@ -1,7 +1,11 @@
-from opentelemetry import trace
-from otel_extensions import instrumented, TelemetryOptions, init_telemetry_provider
-import time
 import random
+import time
+from typing import cast
+
+from opentelemetry import trace
+from opentelemetry.trace import SpanContext
+
+from otel_extensions import TelemetryOptions, init_telemetry_provider, instrumented
 
 
 @instrumented
@@ -34,7 +38,7 @@ def main() -> int:
     # manually create a span
     with trace.get_tracer(__name__).start_as_current_span("main") as span:
         foo()
-        return span.get_span_context().trace_id
+        return cast(SpanContext, span.get_span_context()).trace_id
 
 
 if __name__ == "__main__":

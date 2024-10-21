@@ -1,12 +1,14 @@
-import pytest
-from opentelemetry.sdk.trace.export import SpanExporter, SpanExportResult
-from opentelemetry.sdk.trace import ReadableSpan
 import typing
+
+import pytest
+from opentelemetry.sdk.trace import ReadableSpan
+from opentelemetry.sdk.trace.export import SpanExporter, SpanExportResult
+
 from otel_extensions import (
     TelemetryOptions,
-    init_telemetry_provider,
-    get_tracer,
     flush_telemetry_data,
+    get_tracer,
+    init_telemetry_provider,
 )
 
 
@@ -41,10 +43,16 @@ def test_custom_exporter(processor_type, service_name, span_name, resource_attrs
     else:
         init_telemetry_provider(options)
     tracer = get_tracer(__name__, service_name)
-    assert "service.name" in tracer.resource.attributes and tracer.resource.attributes["service.name"] == service_name
+    assert (
+        "service.name" in tracer.resource.attributes
+        and tracer.resource.attributes["service.name"] == service_name
+    )
     if resource_attrs:
         for attr in resource_attrs:
-            assert attr in tracer.resource.attributes and tracer.resource.attributes[attr] == resource_attrs[attr]
+            assert (
+                attr in tracer.resource.attributes
+                and tracer.resource.attributes[attr] == resource_attrs[attr]
+            )
     with tracer.start_as_current_span(span_name) as span:
         assert span.name == span_name
         span_id = span.context.span_id

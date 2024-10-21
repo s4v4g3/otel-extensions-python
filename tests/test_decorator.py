@@ -1,8 +1,13 @@
-from otel_extensions import instrumented
+import os
+from collections.abc import Sequence
+from typing import cast
+
+import pytest
 from opentelemetry import trace
 from opentelemetry.sdk.trace import ReadableSpan
-from collections.abc import Sequence
-import pytest
+from opentelemetry.trace import Span
+
+from otel_extensions import instrumented
 
 SPAN_ATTRS = {
     "foo": "bar",
@@ -79,16 +84,50 @@ def test_decorator_with_span_attributes():
     decorated_function_with_span_attrs()
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_async_decorator_with_default_name():
     await decorated_async_function()
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_async_decorator_with_custom_name():
     await decorated_async_function_with_custom_name()
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_async_decorator_with_span_attributes():
     await decorated_async_function_with_span_attrs()
+
+
+@pytest.fixture
+def otel_process_modules(request):
+    if request.param is not None:
+        os.environ["OTEL_PROCESS_MODULES"] = request.param
+    yield request.param
+    os.environ.pop("OTEL_PROCESS_MODULES", None)
+
+
+@pytest.mark.parametrize(
+    "otel_process_modules", ["foo", "", None, "test_decorator"], indirect=True
+)
+def test_decorator_with_module_filter(otel_process_modules):
+    """If the OTEL_PROCESS_MODULES environment variable is set, the decorator should only
+    create a span if the module name for the wrapped function matches the filter.
+    """
+
+    @instrumented(span_name="decorated_function_with_module_filter")
+    def decorated_local_function():
+        span: Span = trace.get_current_span()
+        if otel_process_modules == "foo":
+            if span.is_recording():
+                assert (
+                    cast(ReadableSpan, span).name
+                    == "test_decorator_with_module_filter[foo] (call)"
+                )
+        else:
+            assert span.is_recording()
+            assert (
+                cast(ReadableSpan, span).name == "decorated_function_with_module_filter"
+            )
+
+    decorated_local_function()

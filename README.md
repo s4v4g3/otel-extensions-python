@@ -117,6 +117,24 @@ if __name__ == '__main__':
 
 ```
 
+#### Conditional span creation
+If the OTEL_PROCESS_MODULES environment variable is set, the `@instrumented` decorator will only create a span if the module of the decorated function is in the list of modules specified in the environment variable.
+
+```python
+import os
+from otel_extensions import instrumented
+
+os.environ["OTEL_PROCESS_MODULES"] = "module1,module2"
+    
+@instrumented
+def foo():
+    """
+    Would create a span named 'foo', but only if the module of this function 
+    were named 'module1' or 'module2'
+    """
+    bar()
+```
+
 ### Trace Context helper class
 The `TraceContextCarrier` class is useful when propagating context across process or thread boundaries
 

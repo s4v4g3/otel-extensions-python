@@ -1,5 +1,6 @@
 pytest
 pytest-cov
 opentelemetry-distro[otlp]
-pytest-asyncio
+anyio
 mypy
+pre-commit

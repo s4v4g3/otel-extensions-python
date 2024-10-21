@@ -361,7 +361,7 @@ class Instrumented:
         )
 
     def _module_allowed(self, func_module_path: str) -> bool:
-        if self.process_modules is None or self.process_modules == "":
+        if not self.process_modules:
             return True
 
         modules = self.process_modules.split(",")

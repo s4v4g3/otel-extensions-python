@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "otel-extensions"
 description = "Python extensions for OpenTelemetry"
 maintainers = [{name = "Joe Savage", email = "joe.savage@gmail.com"}]
-version = "1.0.3"
+version = "1.1.0"
 license = {text = "Apache-2.0"}
 classifiers = [
     "Intended Audience :: Developers",

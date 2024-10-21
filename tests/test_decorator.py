@@ -111,6 +111,10 @@ def otel_process_modules(request):
     "otel_process_modules", ["foo", "", None, "test_decorator"], indirect=True
 )
 def test_decorator_with_module_filter(otel_process_modules):
+    """If the OTEL_PROCESS_MODULES environment variable is set, the decorator should only
+    create a span if the module name for the wrapped function matches the filter.
+    """
+
     @instrumented(span_name="decorated_function_with_module_filter")
     def decorated_local_function():
         span: Span = trace.get_current_span()
